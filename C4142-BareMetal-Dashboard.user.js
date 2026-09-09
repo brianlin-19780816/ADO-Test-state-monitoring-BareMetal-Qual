@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BareMetal Qual Test Status Dashboard
 // @namespace    local.ado.dvscale.dashboard
-// @version      1.11.10
+// @version      1.11.11
 // @description  Adds a multi-project Query selector, real Test Results, XLSX exports, query-scoped snapshots, and Extension support.
 // @homepageURL  https://github.com/brianlin-19780816/ADO-Test-state-monitoring-BareMetal-Qual
 // @supportURL   https://github.com/brianlin-19780816/ADO-Test-state-monitoring-BareMetal-Qual/issues
@@ -265,32 +265,10 @@
       var suiteRoots = suiteTreeResponse.value || [];
       suiteRoots.forEach(function (suite) { indexSuite(suite, null); });
       var selectedSuite = suiteById[String(D.CFG.suiteId)] || null;
-      var selectedParent = selectedSuite && parentById[String(selectedSuite.id)];
-      var expectedSuiteNames = [
-        'Enumeration (From R-SCM)',
-        'Firmware Update (With R-SCM)',
-        'Cycle/Cycle + Stress (R-SCM Cmd)',
-        'System Stress (Telemetry with R-SCM cmd)',
-        'R-SCM Full Command Test',
-        'Debug',
-        'Power Telemetry'
-      ];
-      function normalizedSuiteName(value) { return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
-      function trackedChildren(container) {
-        var children = container ? (container.children || []) : suiteRoots;
-        var byName = {};
-        children.forEach(function (suite) { byName[normalizedSuiteName(suite.name)] = suite; });
-        return expectedSuiteNames.map(function (name) { return byName[normalizedSuiteName(name)] || null; }).filter(Boolean);
+      if (!selectedSuite) {
+        throw new Error('The configured BareMetal Test Suite ' + D.CFG.suiteId + ' was not found in Test Plan ' + D.CFG.planId + '.');
       }
-      var candidates = [selectedSuite, selectedParent].concat(suiteContainers);
-      var configSuites = [];
-      for (var candidateIndex = 0; candidateIndex < candidates.length && configSuites.length !== expectedSuiteNames.length; candidateIndex++) {
-        configSuites = trackedChildren(candidates[candidateIndex]);
-      }
-      if (configSuites.length !== expectedSuiteNames.length) configSuites = trackedChildren(null);
-      if (configSuites.length !== expectedSuiteNames.length) {
-        throw new Error('Expected the 7 R-SCM Test Suites in the selected Test Plan branch, but found ' + configSuites.length + '.');
-      }
+      var configSuites = [selectedSuite];
       suiteGroups = {};
       function normalizePointOutcome(value) {
         var key = String(value || 'none').replace(/[\s_-]+/g, '').toLowerCase();
@@ -344,7 +322,7 @@
         var fallbackSuite = { id: D.CFG.suiteId, name: 'Test Suite ' + D.CFG.suiteId };
         (fallbackPoints.value || []).forEach(function (point) { addTestPoint(point, fallbackSuite); });
       }
-      if (!ids.length) throw new Error('The selected seven R-SCM Test Suites contain no readable Test Cases.');
+      if (!ids.length) throw new Error('The configured BareMetal Test Suite contains no readable Test Cases.');
     } else {
       var wiql = await D.apiFetch(base + '/' + encodeURIComponent(D.CFG.project) + '/_apis/wit/wiql/' + D.CFG.queryId + '?api-version=6.0&$top=5000');
       rels = wiql.workItemRelations || [];
@@ -894,15 +872,8 @@
   };
   D.stacked = function (labels, perRack, states) {
     function shortSuiteLabel(label, index) {
-      var value = String(label || '').toLowerCase();
-      if (value.indexOf('enumeration') >= 0) return 'Enumeration';
-      if (value.indexOf('firmware update') >= 0) return 'Firmware';
-      if (value.indexOf('cycle/cycle') >= 0) return 'Cycle/Stress';
-      if (value.indexOf('system stress') >= 0) return 'System Stress';
-      if (value.indexOf('full command') >= 0) return 'Full Command';
-      if (value.indexOf('debug') >= 0) return 'Debug';
-      if (value.indexOf('power telemetry') >= 0) return 'Power';
-      return 'Suite ' + (index + 1);
+      var value = String(label || ('Test Suite ' + (index + 1))).replace(/\s+/g, ' ').trim();
+      return value.length > 28 ? value.slice(0, 27) + '…' : value;
     }
     var W = 460, H = 300, L = 40, B = 40, T = 14, Rp = 12;
     var s = D.svg('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', height: '100%', preserveAspectRatio: 'xMidYMid meet' });
